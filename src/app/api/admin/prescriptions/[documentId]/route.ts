@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/db";
-import { authorize } from "@/lib/auth/guards";
+import { authorize, AuthorizationError } from "@/lib/auth/guards";
 import { PERMISSIONS } from "@/lib/auth/rbac";
 import { getStorage } from "@/lib/storage";
 import { recordAudit } from "@/lib/audit";
 import { AuditAction } from "@/generated/prisma/enums";
-import { getClientIp, getUserAgent } from "@/lib/security";
+import { getClientIp, getUserAgent, jsonError } from "@/lib/security";
 
 /**
  * Serves a prescription document to authorised pharmacy personnel.
@@ -21,7 +21,17 @@ export async function GET(
 ) {
   const { documentId } = await ctx.params;
 
-  const actor = await authorize(PERMISSIONS.PRESCRIPTION_READ);
+  let actor;
+  try {
+    actor = await authorize(PERMISSIONS.PRESCRIPTION_READ);
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      // An unauthorised request must not look like a server failure, and it
+      // must not reveal whether the document exists.
+      return jsonError(error.status, "forbidden", "You are not allowed to read this document.");
+    }
+    throw error;
+  }
 
   const document = await prisma.prescriptionDocument.findUnique({
     where: { id: documentId },
