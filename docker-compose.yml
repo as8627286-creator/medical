@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medical_store}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-medical_store}
+      # Deterministic collation keeps index behaviour identical between hosts.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medical_store} -d ${POSTGRES_DB:-medical_store}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - medical-store
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - uploads:/app/storage
+    ports:
+      # Bound to localhost: the reverse proxy is the only public entry point.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - medical-store
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+      - certbot-webroot:/var/www/certbot
+    networks:
+      - medical-store
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - ./docker/nginx/certs:/etc/letsencrypt
+    # Obtain a certificate for the public host name.
+    # entrypoint: >
+    #   sh -c "certbot certonly --webroot -w /var/www/certbot
+    #   -d ${PUBLIC_HOSTNAME} --agree-tos -m ${CERTBOT_EMAIL} --non-interactive
+    #   && certbot renew --webroot -w /var/www/certbot"
+    entrypoint: /bin/true
+    networks:
+      - medical-store
+
+volumes:
+  db-data:
+  uploads:
+  certbot-webroot:
+
+networks:
+  medical-store:
+    driver: bridge

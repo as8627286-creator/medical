@@ -1,0 +1,901 @@
+// Medical Store - Prisma schema
+//
+// Money is stored as integer paise (1 INR = 100 paise). Floating point is never used
+// for monetary values.
+//
+// IMPORTANT COMPLIANCE NOTE
+// -------------------------
+// This schema encodes *technical* controls only. It does not assert that any pharmacy
+// is legally permitted to sell medicines online. The `LegalRestriction` field and the
+// `store.compliance_confirmed` setting exist to make the *absence* of confirmation
+// fail closed. See docs/PHARMACY_COMPLIANCE_CHECKLIST.md.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Well-known roles. Custom roles may be added with granular permissions.
+enum RoleCode {
+  CUSTOMER
+  ADMIN
+  PHARMACIST
+}
+
+/// How a product may be sold through this storefront.
+enum SaleEligibility {
+  /// May be sold online without additional checks.
+  ELIGIBLE_FOR_ONLINE_SALE
+  /// May not be sold through this online storefront at all.
+  NOT_FOR_ONLINE_SALE
+  /// May be sold online only against a valid prescription (extra pharmacist checks
+  /// may be configured by the pharmacy).
+  PRESCRIPTION_REQUIRED
+}
+
+/// Legal / regulatory restriction applied to a product.
+///
+/// Values other than NONE are *not* freely editable by administrators through the
+/// ordinary product editor. They are applied by a pharmacist or by a controlled
+/// process so that legal restrictions cannot be bypassed by ordinary product editing.
+enum LegalRestriction {
+  NONE
+  /// Legally prohibited for sale through online channels.
+  PROHIBITED_FOR_ONLINE_SALE
+  /// Controlled substance; sale requires additional checks configured by the pharmacy.
+  CONTROLLED_SUBSTANCE
+  /// Requires a valid prescription. Cannot be weakened by an administrator.
+  PRESCRIPTION_ONLY
+  /// Requires cold-chain handling; online sale only if the pharmacy confirms capability.
+  COLD_CHAIN
+}
+
+enum DosageForm {
+  TABLET
+  CAPSULE
+  SYRUP
+  SUSPENSION
+  SOLUTION
+  DROPS
+  INJECTION
+  CREAM
+  OINTMENT
+  GEL
+  LOTION
+  SHAMPOO
+  SOAP
+  POWDER
+  SACHET
+  PATCH
+  SUPPOSITORY
+  SPRAY
+  INHALER
+  DROPLET
+  OTHER
+}
+
+enum OrderStatus {
+  /// Order created, awaiting store confirmation.
+  PENDING
+  /// Confirmed by the store; being prepared.
+  CONFIRMED
+  /// Blocked: at least one prescription-required item is not yet approved.
+  AWAITING_PRESCRIPTION_APPROVAL
+  /// Being packed / dispensed.
+  PREPARING
+  /// Handed to the delivery agent.
+  DISPATCHED
+  /// With the delivery agent.
+  OUT_FOR_DELIVERY
+  /// Delivered and (if applicable) payment collected.
+  DELIVERED
+  /// Cancelled by the customer or the store.
+  CANCELLED
+  /// Delivery attempt failed; the order may be rescheduled or cancelled.
+  FAILED_DELIVERY
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  INITIATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentProviderCode {
+  /// Cash on delivery; no external provider.
+  CASH_ON_DELIVERY
+  /// Built-in deterministic simulator used for development and automated tests.
+  SANDBOX
+  /// Adapters for real gateways are added without changing call sites.
+  RAZORPAY
+  STRIPE
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  REJECTED
+}
+
+enum PrescriptionStatus {
+  NOT_REQUIRED
+  AWAITING_UPLOAD
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum PrescriptionDecision {
+  APPROVED
+  REJECTED
+}
+
+enum DeliveryStatus {
+  PENDING
+  PREPARING
+  DISPATCHED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+enum InventoryAdjustmentReason {
+  PURCHASE
+  SALE
+  RETURN
+  DAMAGE
+  EXPIRY
+  CORRECTION
+  RESERVATION_RELEASE
+  RECALL
+}
+
+/// Coarse audit action names. Free-form detail lives in `AuditEvent.metadata`.
+enum AuditAction {
+  AUTH_LOGIN
+  AUTH_LOGIN_FAILED
+  AUTH_LOGOUT
+  AUTH_PASSWORD_CHANGED
+  USER_CREATED
+  USER_UPDATED
+  USER_ROLE_CHANGED
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_ACTIVATED
+  PRODUCT_DEACTIVATED
+  PRODUCT_DELETED
+  PRODUCT_IMAGE_UPLOADED
+  PRODUCT_IMAGE_REMOVED
+  PRODUCT_PRICE_CHANGED
+  PRODUCT_STOCK_ADJUSTED
+  PRODUCT_LEGAL_RESTRICTION_CHANGED
+  PRESCRIPTION_UPLOADED
+  PRESCRIPTION_REVIEWED
+  PRESCRIPTION_DOCUMENT_DELETED
+  ORDER_PLACED
+  ORDER_STATUS_CHANGED
+  ORDER_CANCELLED
+  PAYMENT_CREATED
+  PAYMENT_STATUS_CHANGED
+  PAYMENT_REFUNDED
+  PAYMENT_WEBHOOK_RECEIVED
+  DELIVERY_STATUS_CHANGED
+  DELIVERY_ZONE_CREATED
+  DELIVERY_ZONE_UPDATED
+  DELIVERY_ZONE_DELETED
+  SETTINGS_UPDATED
+  AUDIT_EXPORTED
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(uuid(7))
+  code        RoleCode @unique
+  name        String
+  description String?
+  /// Granular permission strings, e.g. "product:write", "prescription:review".
+  permissions String[]
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+
+  @@index([code])
+}
+
+model User {
+  id           String  @id @default(uuid(7))
+  email        String  @unique
+  phone        String?
+  fullName     String
+  passwordHash String?
+  roleId       String
+  isActive     Boolean @default(true)
+
+  /// Brute-force protection state. Reset on successful login.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil          DateTime?
+  lastLoginAt          DateTime?
+  passwordChangedAt    DateTime?
+  /// Sessions are invalidated when this is in the past (global logout-all).
+  sessionsValidFrom DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role                Role                @relation(fields: [roleId], references: [id])
+  profile             CustomerProfile?
+  sessions            Session[]
+  addresses           Address[]
+  cart                Cart?
+  orders              Order[]
+  prescriptions       PrescriptionDocument[]
+  auditEvents         AuditEvent[]         @relation("AuditActor")
+  inventoryAdjustments InventoryAdjustment[]
+  priceChanges        PriceHistory[]
+  productImages       ProductImage[]
+  createdProducts     Product[]            @relation("ProductCreatedBy")
+  updatedProducts     Product[]            @relation("ProductUpdatedBy")
+  prescriptionReviews PrescriptionReview[]
+  uploads             PrescriptionDocument[] @relation("PrescriptionUploadedBy")
+  settingsUpdates     StoreSettings[]      @relation("SettingsUpdatedBy")
+  settingUpdates      StoreSetting[]       @relation("SettingUpdatedBy")
+
+  @@index([roleId])
+  @@index([isActive])
+  @@index([phone])
+}
+
+/// Non-medical customer profile. Deliberately excludes medical history:
+/// health data is sensitive personal data and is only collected where a specific
+/// regulatory or dispensing need exists (see PrescriptionDocument instead).
+model CustomerProfile {
+  id             String   @id @default(uuid(7))
+  userId         String   @unique
+  alternatePhone String?
+  preferredLanguage String @default("en")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id String @id @default(uuid(7))
+  /// SHA-256 hash of the opaque session token. The raw token is only ever in the
+  /// client cookie; the database never stores the secret value.
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Address {
+  id         String   @id @default(uuid(7))
+  userId     String
+  label      String?
+  fullName   String
+  phone      String
+  line1      String
+  line2      String?
+  landmark   String?
+  city       String
+  state      String
+  pincode    String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([pincode])
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue
+// ---------------------------------------------------------------------------
+
+model ProductCategory {
+  id          String   @id @default(uuid(7))
+  name        String
+  slug        String   @unique
+  description String?
+  parentId    String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children ProductCategory[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@index([isActive, sortOrder])
+}
+
+model Product {
+  id           String   @id @default(uuid(7))
+  sku          String   @unique
+  name         String
+  brand        String?
+  manufacturer String
+  strength     String?
+  dosageForm   DosageForm
+  packSize     String
+  /// Short human-readable pack unit, e.g. "tablets", "100 ml".
+  packUnit     String?
+
+  description        String?
+  /// Mandatory cautionary text shown on the product page. Never auto-generated.
+  warnings           String?
+  usageInformation   String?
+  storageInstructions String?
+  additionalInfo     String?
+
+  /// Listed price (MRP) in paise. Informational only.
+  mrpInPaise         Int?
+  /// Selling price in paise. Always computed/validated server-side.
+  sellingPriceInPaise Int
+  /// Tax percentage applied at checkout, e.g. 12 for 12% GST.
+  taxPercent        Decimal @default(0) @db.Decimal(5, 2)
+  taxInPaise        Int     @default(0)
+
+  stockQuantity      Int @default(0)
+  lowStockThreshold  Int @default(10)
+  /// Quantity currently reserved by unfulfilled orders.
+  reservedQuantity   Int @default(0)
+
+  categoryId String
+  isActive   Boolean @default(true)
+
+  prescriptionRequired Boolean         @default(false)
+  saleEligibility      SaleEligibility @default(ELIGIBLE_FOR_ONLINE_SALE)
+  /// Legal restriction. Changing this requires the `product:legal_restriction`
+  /// permission and is always audited. Administrators cannot clear a restriction
+  /// through the ordinary product editor.
+  legalRestriction    LegalRestriction @default(NONE)
+  legalRestrictionNote String?
+  legalRestrictionSetById String?
+  legalRestrictionSetAt DateTime?
+
+  /// Lowercased concatenation of searchable fields, kept in sync on write.
+  searchText String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdById String?
+  updatedById String?
+
+  category           ProductCategory      @relation(fields: [categoryId], references: [id])
+  createdBy          User?                @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy          User?                @relation("ProductUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  images             ProductImage[]
+  inventoryAdjustments InventoryAdjustment[]
+  priceHistory       PriceHistory[]
+  cartItems          CartItem[]
+  orderItems         OrderItem[]
+
+  @@index([categoryId, isActive])
+  @@index([isActive, createdAt])
+  @@index([stockQuantity])
+  @@index([saleEligibility, isActive])
+  @@index([legalRestriction])
+  @@index([name])
+  @@index([brand])
+  @@index([manufacturer])
+}
+
+model ProductImage {
+  id         String   @id @default(uuid(7))
+  productId  String
+  /// Storage key of the primary (largest) variant. Never a user-supplied filename.
+  storageKey String   @unique
+  /// Public URL path served by the media route (product images only).
+  url        String
+  /// Generated responsive variants: [{ "width": 640, "key": "products/...", "bytes": 1234 }]
+  variants   Json?
+  width      Int
+  height     Int
+  bytes      Int
+  mimeType   String
+  altText    String?
+  sortOrder  Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  createdById String?
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([productId, sortOrder])
+  @@index([productId, isPrimary])
+}
+
+model InventoryAdjustment {
+  id        String                   @id @default(uuid(7))
+  productId String
+  delta     Int
+  stockAfter Int
+  reason    InventoryAdjustmentReason
+  note      String?
+  orderId   String?
+  createdAt DateTime                 @default(now())
+  createdById String?
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  order     Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([reason])
+}
+
+model PriceHistory {
+  id                 String   @id @default(uuid(7))
+  productId          String
+  previousPriceInPaise Int
+  newPriceInPaise    Int
+  previousMrpInPaise  Int?
+  newMrpInPaise      Int?
+  reason             String?
+  createdAt          DateTime @default(now())
+  changedById        String?
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Cart
+// ---------------------------------------------------------------------------
+
+model Cart {
+  id        String   @id @default(uuid(7))
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@index([updatedAt])
+}
+
+model CartItem {
+  id        String   @id @default(uuid(7))
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id          String      @id @default(uuid(7))
+  orderNumber String      @unique
+  userId      String
+  status      OrderStatus @default(PENDING)
+
+  paymentMethod PaymentMethod
+
+  /// Money snapshots computed on the server at order time.
+  subtotalInPaise   Int
+  deliveryFeeInPaise Int @default(0)
+  taxInPaise        Int  @default(0)
+  discountInPaise   Int  @default(0)
+  totalInPaise      Int
+  currency          String @default("INR")
+
+  /// Delivery address snapshot (the address row may later be edited or deleted).
+  deliveryName     String
+  deliveryPhone    String
+  deliveryLine1    String
+  deliveryLine2    String?
+  deliveryLandmark String?
+  deliveryCity     String
+  deliveryState    String
+  deliveryPincode  String
+
+  deliveryZoneId String?
+  estimatedDeliveryDaysMin Int?
+  estimatedDeliveryDaysMax Int?
+
+  /// True when the order contains at least one prescription-required item.
+  requiresPrescription Boolean @default(false)
+  /// True once every prescription requirement for the order is APPROVED.
+  prescriptionsApproved Boolean @default(false)
+
+  customerNote String?
+
+  placedAt       DateTime  @default(now())
+  confirmedAt    DateTime?
+  preparedAt     DateTime?
+  dispatchedAt   DateTime?
+  outForDeliveryAt DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  failureReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user                   User                 @relation(fields: [userId], references: [id])
+  deliveryZone           DeliveryZone?        @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  items                  OrderItem[]
+  payments               Payment[]
+  prescriptions          PrescriptionDocument[]
+  delivery               DeliveryRecord?
+  inventoryAdjustments   InventoryAdjustment[]
+  webhookEvents          PaymentWebhookEvent[]
+  auditEvents            AuditEvent[]
+
+  @@index([userId, placedAt])
+  @@index([status, placedAt])
+  @@index([orderNumber])
+  @@index([deliveryZoneId])
+}
+
+model OrderItem {
+  id        String @id @default(uuid(7))
+  orderId   String
+  productId String?
+
+  /// Catalogue snapshot: historical orders must not change when the catalogue does.
+  productName   String
+  productBrand  String?
+  productSku    String
+  productManufacturer String
+  productStrength String?
+  productDosageForm DosageForm
+  productPackSize String
+
+  unitPriceInPaise Int
+  taxPercent       Decimal @default(0) @db.Decimal(5, 2)
+  taxInPaise       Int     @default(0)
+  quantity         Int
+  lineTotalInPaise Int
+  prescriptionRequired Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  prescriptionRequirement PrescriptionRequirement?
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id       String          @id @default(uuid(7))
+  orderId  String
+  method   PaymentMethod
+  provider PaymentProviderCode
+  status   PaymentStatus   @default(PENDING)
+
+  amountInPaise Int
+  currency      String @default("INR")
+
+  /// Idempotency key supplied by the server for this payment attempt.
+  idempotencyKey String @unique
+
+  providerOrderId   String?
+  providerPaymentId String?
+  providerSignature String?
+  providerReference String?
+
+  failureCode   String?
+  failureReason String?
+
+  capturedAt DateTime?
+  refundedAt DateTime?
+  refundedAmountInPaise Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([providerPaymentId])
+  @@index([status])
+}
+
+/// Raw webhook receipt used for idempotency, signature validation and audit.
+model PaymentWebhookEvent {
+  id        String            @id @default(uuid(7))
+  provider  PaymentProviderCode
+  /// Provider-supplied event identifier. Unique per provider.
+  eventId   String
+  eventType String?
+  /// SHA-256 of the raw request body, for tamper evidence.
+  payloadHash String
+  signatureValid Boolean
+  status     WebhookEventStatus @default(RECEIVED)
+  errorMessage String?
+  processedAt DateTime?
+  orderId   String?
+  createdAt DateTime @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([status, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Prescriptions
+// ---------------------------------------------------------------------------
+
+model PrescriptionDocument {
+  id        String   @id @default(uuid(7))
+  userId    String
+  orderId   String?
+  /// Private storage key. Never exposed through a public URL.
+  storageKey String  @unique
+  originalFileName String?
+  mimeType  String
+  bytes     Int
+  /// SHA-256 of the stored bytes, used to detect duplicate uploads.
+  sha256    String
+  uploadedAt DateTime @default(now())
+  uploadedById String?
+  /// Documents are removed by the retention job once this passes.
+  retentionExpiresAt DateTime?
+  deletedAt DateTime?
+
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order    Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  uploadedBy User? @relation("PrescriptionUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  requirements PrescriptionRequirement[]
+  reviews  PrescriptionReview[]
+
+  @@index([userId, uploadedAt])
+  @@index([orderId])
+  @@index([retentionExpiresAt])
+}
+
+model PrescriptionRequirement {
+  id        String            @id @default(uuid(7))
+  orderItemId String          @unique
+  documentId String?
+  status    PrescriptionStatus @default(AWAITING_UPLOAD)
+  /// Configured validity window for a prescription, in days.
+  validForDays Int?
+  validUntil   DateTime?
+  expiresAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItem  OrderItem           @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  document   PrescriptionDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  reviews    PrescriptionReview[]
+
+  @@index([status])
+  @@index([documentId])
+}
+
+model PrescriptionReview {
+  id           String               @id @default(uuid(7))
+  requirementId String
+  documentId   String?
+  decision     PrescriptionDecision
+  reason       String?
+  notes        String?
+  createdAt    DateTime             @default(now())
+  reviewerId   String
+
+  requirement PrescriptionRequirement  @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  document    PrescriptionDocument?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  reviewer    User                     @relation(fields: [reviewerId], references: [id])
+
+  @@index([requirementId, createdAt])
+  @@index([reviewerId])
+}
+
+// ---------------------------------------------------------------------------
+// Delivery
+// ---------------------------------------------------------------------------
+
+model DeliveryZone {
+  id          String   @id @default(uuid(7))
+  name        String
+  city        String?
+  description String?
+  deliveryFeeInPaise Int @default(0)
+  minOrderAmountInPaise Int @default(0)
+  estimatedDaysMin Int?
+  estimatedDaysMax Int?
+  /// Latest order time (local, HH:mm) after which same/next-day estimates change.
+  orderCutoffTime String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  updatedById String?
+
+  pincodes DeliveryZonePincode[]
+  orders   Order[]
+  deliveryRecords DeliveryRecord[]
+
+  @@index([isActive])
+}
+
+model DeliveryZonePincode {
+  id        String   @id @default(uuid(7))
+  zoneId    String
+  pincode   String
+  city      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  zone DeliveryZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([pincode])
+  @@index([zoneId])
+}
+
+model DeliveryRecord {
+  id        String         @id @default(uuid(7))
+  orderId   String         @unique
+  status    DeliveryStatus @default(PENDING)
+  zoneId    String?
+  attempts  Int            @default(0)
+  assignedTo String?
+  outForDeliveryAt DateTime?
+  deliveredAt DateTime?
+  deliveredToName String?
+  proofOfDeliveryNote String?
+  proofOfDeliveryStorageKey String?
+  failureReason String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  zone  DeliveryZone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Settings & audit
+// ---------------------------------------------------------------------------
+
+/// Singleton row (id = 1) holding the pharmacy's public details and policies.
+model StoreSettings {
+  id        Int      @id @default(1)
+  pharmacyName String
+  legalName String?
+  licenseNumber String?
+  pharmacistName String?
+  pharmacistRegistrationNumber String?
+  addressLine1 String?
+  addressLine2 String?
+  city String?
+  state String?
+  pincode String?
+  phone String?
+  email String?
+  gstin String?
+  aboutText String?
+  refundPolicyText String?
+  deliveryPolicyText String?
+  privacyPolicyText String?
+  supportEmail String?
+  supportPhone String?
+  businessHours String?
+
+  minOrderAmountInPaise Int @default(0)
+  defaultDeliveryFeeInPaise Int @default(0)
+
+  codEnabled Boolean @default(true)
+  codMinOrderAmountInPaise Int @default(0)
+  codMaxOrderAmountInPaise Int?
+
+  /// Master switch for accepting new orders. Defaults to false: the store must
+  /// not accept real medicine sales until compliance is confirmed.
+  salesEnabled Boolean @default(false)
+  /// Master switch for real (non-sandbox) online payments. Defaults to false.
+  livePaymentsEnabled Boolean @default(false)
+  /// Set by an administrator once the compliance checklist has been completed
+  /// by qualified personnel. Does not itself grant any legal authorisation.
+  complianceConfirmed Boolean @default(false)
+  complianceConfirmedAt DateTime?
+  complianceConfirmedById String?
+
+  maintenanceMode Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation("SettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+/// Key/value store for operational toggles that are read on hot paths.
+model StoreSetting {
+  key        String   @id
+  value      String
+  description String?
+  updatedAt  DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation("SettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model AuditEvent {
+  id         String      @id @default(uuid(7))
+  action     AuditAction
+  entityType String
+  entityId   String?
+  summary    String
+  /// Structured, non-sensitive detail. Must never contain passwords, session
+  /// tokens, payment secrets or full prescription contents.
+  metadata   Json?
+  actorId    String?
+  actorRole  String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId String?
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
