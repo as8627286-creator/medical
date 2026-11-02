@@ -1,0 +1,77 @@
+{
+  "source": "1mg.com public product pages",
+  "sourceNotice": "Third-party product photography owned by 1mg.com and the respective brands. Used as a development placeholder only; see docs/PRODUCT_IMAGES.md.",
+  "retrievedAt": "2026-10-20",
+  "products": [
+    {
+      "sku": "DEMO-ANLG-001",
+      "sourceProduct": "Dolo 650 Tablet",
+      "sourcePage": "https://www.1mg.com/drugs/dolo-650-tablet-74467",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/cropped/mu5bahqxfrp28cut6que.jpg",
+      "note": "Carton and blister strip of a paracetamol 650 mg tablet, the same class as the sample analgesic tablet."
+    },
+    {
+      "sku": "DEMO-ANLG-002",
+      "sourceProduct": "Dolopar 250 Suspension",
+      "sourcePage": "https://www.1mg.com/drugs/dolopar-250-suspension-228130",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/ec5f2d2451a94536b9cd479156b832f5.jpg",
+      "note": "Front label of a paracetamol oral suspension bottle, the same class as the sample antipyretic syrup."
+    },
+    {
+      "sku": "DEMO-ANTB-001",
+      "sourceProduct": "Campicillin 250 Capsule",
+      "sourcePage": "https://www.1mg.com/drugs/campicillin-250-capsule-111693",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/da9804a91ab3467b94fa69e6aeff5763.jpg",
+      "note": "Carton and blister of a 250 mg antibiotic capsule, the same class as the sample antibiotic capsule."
+    },
+    {
+      "sku": "DEMO-ANAC-001",
+      "sourceProduct": "Kantacid Oral Suspension",
+      "sourcePage": "https://www.1mg.com/drugs/kantacid-oral-suspension-571443",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/cropped/muzxgvrzk8t7y1hjzpic.png",
+      "note": "Front label of an antacid suspension bottle, the same class as the sample antacid suspension."
+    },
+    {
+      "sku": "DEMO-VTMB-001",
+      "sourceProduct": "Tayo 60K Chewable Tablet",
+      "sourcePage": "https://www.1mg.com/drugs/tayo-60k-chewable-tablet-orange-1137099",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/ff04a0ae9994472b995ec5e1e86ec805.jpg",
+      "note": "Carton of a cholecalciferol 60,000 IU chewable tablet, the same class as the sample vitamin D3 tablet."
+    },
+    {
+      "sku": "DEMO-DIAB-001",
+      "sourceProduct": "Aspen Gluco Chek 5 Seconds Blood Glucose Test Strip",
+      "sourcePage": "https://www.1mg.com/otc/aspen-gluco-chek-5-seconds-blood-glucose-test-strip-otc860006",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/971cca86ecdb48349551cf2b0a6e20dc.jpg",
+      "note": "Vial and carton of blood glucose test strips, the same class as the sample test strip."
+    },
+    {
+      "sku": "DEMO-RESP-001",
+      "sourceProduct": "Budeshine 200 Inhaler",
+      "sourcePage": "https://www.1mg.com/drugs/budeshine-200-inhaler-1146183",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/903349c4a318484f8975cf9105ac5da6.png",
+      "note": "Carton and device of a 200 mcg inhalation aerosol, the same class as the sample inhaler."
+    },
+    {
+      "sku": "DEMO-FAID-001",
+      "sourceProduct": "Betadine 5% Ointment",
+      "sourcePage": "https://www.1mg.com/drugs/betadine-5-ointment-267079",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/0131c4e99ee644c6bb1a70ec7f74e9f2.jpg",
+      "note": "Jar of a 5% antiseptic preparation, the same class as the sample antiseptic cream."
+    },
+    {
+      "sku": "DEMO-BABY-001",
+      "sourceProduct": "Pampers Premium Care Pants Size Medium",
+      "sourcePage": "https://www.1mg.com/otc/pampers-premium-care-pants-no-marks-design-india-s-softest-diaper-size-medium-otc545666",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/dd53e0023a2d4a638bb40e6a38e7df3c.jpg",
+      "note": "Carton of medium size baby diaper pants, the same class as the sample baby diaper pants."
+    },
+    {
+      "sku": "DEMO-ANLG-003",
+      "sourceProduct": "Volini Joint Xpert Long-Lasting Pain Relief Gel",
+      "sourcePage": "https://www.1mg.com/drugs/volini-joint-xpert-long-lasting-pain-relief-gel-619272",
+      "imageUrl": "https://onemg.gumlet.io/l_watermark_346/a_ignore,c_fit,q_auto,f_auto/758e6a3386944ae0937e83526600ecef.jpg",
+      "note": "Tube of a topical pain relief gel, the same class as the sample pain relief gel."
+    }
+  ]
+}

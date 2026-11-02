@@ -137,6 +137,7 @@ Full instructions, including the Docker-based setup, are in
 | [SECURITY.md](docs/SECURITY.md) | Threat model, controls, known limitations |
 | [PHARMACY_COMPLIANCE_CHECKLIST.md](docs/PHARMACY_COMPLIANCE_CHECKLIST.md) | The launch gate: what must be confirmed by professionals |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment, HTTPS, hardening, firewall |
+| [DEPLOYMENT-FREE-TIER.md](docs/DEPLOYMENT-FREE-TIER.md) | Free-tier deployment (no server, no card), and its limits |
 | [BACKUP_AND_RESTORE.md](docs/BACKUP_AND_RESTORE.md) | Backup, restore, migration and rollback |
 | [TESTING.md](docs/TESTING.md) | Test strategy, how to run the suites |
 
@@ -156,7 +157,9 @@ browser.
 1. Work through [`docs/PHARMACY_COMPLIANCE_CHECKLIST.md`](docs/PHARMACY_COMPLIANCE_CHECKLIST.md)
    with a qualified pharmacist and, where required, a regulatory adviser.
 2. Replace the development catalogue, the placeholder photos and the
-   development accounts with real data.
+   development accounts with real data. The development photos are real pack
+   shots from 1mg.com that the pharmacy is not licensed to publish; see
+   [`docs/PRODUCT_IMAGES.md`](docs/PRODUCT_IMAGES.md).
 3. Set `PAYMENT_LIVE=false` until the payment provider confirms the merchant
    is eligible for pharmacy transactions.
 4. Turn on **Accept new orders** in the administration area only after step 1

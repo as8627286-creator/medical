@@ -1,0 +1,67 @@
+# Render Blueprint for the free tier.
+#
+# Create the service from the Render dashboard:
+#   New -> Blueprint -> connect this repository -> Apply.
+#
+# The database is not part of this file. Create a free Neon project first and
+# paste its connection string when Render asks for DATABASE_URL.
+# The full procedure is in docs/DEPLOYMENT-FREE-TIER.md.
+#
+# For a production deployment on your own server use docs/DEPLOYMENT.md and
+# docker-compose.yml instead. That path has no sleep, no shared filesystem and
+# no third-party limits.
+
+services:
+  - type: web
+    name: medical-store
+    runtime: node
+    plan: free
+    region: singapore
+    # The dev dependencies are needed: the Prisma CLI generates the client
+    # during the build and applies the migrations when the service starts.
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    # Migrations run before the server accepts traffic.
+    startCommand: npm run db:migrate && npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      - key: NODE_ENV
+        value: "production"
+      - key: DATABASE_URL
+        sync: false
+      # Must match the public address of the service exactly. The
+      # same-origin check in src/lib/security.ts compares the request host
+      # with this value, so a wrong value breaks every form submission.
+      - key: APP_URL
+        value: "https://medical-store.onrender.com"
+      - key: APP_NAME
+        value: "Medical Store"
+      - key: SESSION_COOKIE_NAME
+        value: "ms_session"
+      - key: SESSION_TTL_HOURS
+        value: "12"
+      - key: ADMIN_SESSION_TTL_HOURS
+        value: "4"
+      # The free plan has no persistent disk, so files live in the container
+      # and are lost on every deploy. Switch to "s3" before the storefront
+      # takes real orders. See docs/DEPLOYMENT-FREE-TIER.md.
+      - key: STORAGE_DRIVER
+        value: "local"
+      - key: STORAGE_LOCAL_ROOT
+        value: "./storage"
+      - key: MAX_PRODUCT_IMAGE_BYTES
+        value: "2097152"
+      - key: MAX_PRESCRIPTION_BYTES
+        value: "10485760"
+      # Real money stays off until the compliance checklist is complete and
+      # the merchant account is approved.
+      - key: PAYMENT_PROVIDER
+        value: "sandbox"
+      - key: PAYMENT_LIVE
+        value: "false"
+      - key: PAYMENT_CURRENCY
+        value: "INR"

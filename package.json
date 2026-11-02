@@ -2,6 +2,9 @@
   "name": "medical-store",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,6 +20,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "node --conditions=react-server --import tsx scripts/seed.ts",
+    "images:import": "node --conditions=react-server --import tsx scripts/import-product-images.ts",
     "admin:bootstrap": "node scripts/bootstrap-admin.mjs",
     "session:dev": "node --conditions=react-server --import tsx scripts/dev-session.ts",
     "test": "vitest run",

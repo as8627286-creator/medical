@@ -31,6 +31,7 @@ npm ci
 | `npm run db:migrate:dev` | Create a migration from the schema and apply it |
 | `npm run db:generate` | Regenerate the Prisma client |
 | `npm run db:seed` | Load the development data |
+| `npm run images:import` | Fetch the development product photos (see [PRODUCT_IMAGES.md](PRODUCT_IMAGES.md)) |
 | `npm run admin:bootstrap` | Create the first administrator |
 | `npm run session:dev` | Print a session token for a user (development only) |
 

@@ -10,7 +10,7 @@ export function ProductCard({ product }: { product: CatalogueProductWithRelation
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
       <Link
-        href={`/products/${encodeURIComponent(product.sku)}`}
+        href={`/products/${encodeURIComponent(product.id)}`}
         className="flex h-44 items-center justify-center overflow-hidden bg-slate-50"
       >
         <ProductImage
@@ -38,7 +38,7 @@ export function ProductCard({ product }: { product: CatalogueProductWithRelation
         </div>
 
         <h3 className="text-sm font-semibold leading-snug text-slate-900">
-          <Link href={`/products/${encodeURIComponent(product.sku)}`} className="hover:underline">
+          <Link href={`/products/${encodeURIComponent(product.id)}`} className="hover:underline">
             {product.name}
           </Link>
         </h3>
